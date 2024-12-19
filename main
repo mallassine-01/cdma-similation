@@ -1,0 +1,101 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Paramètres de la simulation
+n_users = 2  # Nombre d'utilisateurs
+num_bits = 100  # Nombre de bits par utilisateur
+spread_factor = 7  # Facteur d'étalement (taille du code)
+snr_db = 10  # Rapport signal sur bruit (en dB)
+
+# Fonction pour générer des données binaires aléatoires
+def generate_data(num_bits):
+    return np.random.choice([0, 1], size=num_bits)
+
+# Code d'étalement : Génération d'un code Walsh-Hadamard
+def walsh_hadamard(n):
+    if n == 1:
+        return np.array([[1]])
+    else:
+        H = walsh_hadamard(n // 2)
+        return np.block([[H, H], [H, -H]])
+
+# Étaler un signal binaire avec un code d'étalement
+def spread_signal(data, code):
+    spreaded_signal = np.zeros(len(data) * len(code))
+    for i, bit in enumerate(data):
+        if bit == 1:
+            spreaded_signal[i * len(code):(i + 1) * len(code)] = code
+        else:
+            spreaded_signal[i * len(code):(i + 1) * len(code)] = -code
+    return spreaded_signal
+
+# Combiner les signaux des utilisateurs et ajouter du bruit
+def combine_signals(signals, snr_db):
+    # Assurez-vous que tous les signaux ont la même longueur
+    assert all(signal.shape == signals[0].shape for signal in signals), "Les signaux doivent avoir la même taille"
+    
+    # Calcul du bruit en fonction du SNR
+    noise_power = np.var(signals[0]) / (10 ** (snr_db / 10))
+    noise = np.random.normal(scale=np.sqrt(noise_power), size=signals[0].shape)
+    
+    # Somme des signaux + bruit
+    return np.sum(signals, axis=0) + noise
+
+# Démodulation : Décorrélation du signal reçu avec le code d'étalement
+def demodulate_signal(received_signal, spreading_code, num_bits, spread_factor):
+    # Corrélation pour obtenir le signal démultiplexé
+    correlation = np.correlate(received_signal, spreading_code, mode='valid')
+    
+    # Décision binaire (BPSK) : prendre le signe de la corrélation
+    demodulated_signal = np.sign(correlation[::spread_factor])
+    
+    # Troncature pour ajuster à la longueur des bits
+    return demodulated_signal[:num_bits]
+
+# Fonction principale
+def main():
+    # Générer des codes d'étalement pour chaque utilisateur
+    codes = walsh_hadamard(spread_factor)
+    code_user1 = codes[0]
+    code_user2 = codes[1]
+    
+    # Générer les données pour chaque utilisateur
+    data_user1 = generate_data(num_bits)
+    data_user2 = generate_data(num_bits)
+    
+    # Étaler les signaux des utilisateurs
+    spreaded_signal_user1 = spread_signal(data_user1, code_user1)
+    spreaded_signal_user2 = spread_signal(data_user2, code_user2)
+    
+    # Combiner les signaux et ajouter du bruit
+    combined_signal = combine_signals(np.array([spreaded_signal_user1, spreaded_signal_user2]), snr_db)
+    
+    # Démoduler les signaux reçus
+    demodulated_user1 = demodulate_signal(combined_signal, code_user1, num_bits, spread_factor)
+    demodulated_user2 = demodulate_signal(combined_signal, code_user2, num_bits, spread_factor)
+    
+    # Affichage des résultats
+    plt.figure(figsize=(10, 6))
+
+    # Signal combiné avec bruit
+    plt.subplot(2, 1, 1)
+    plt.plot(combined_signal, label='Signal combiné avec bruit')
+    plt.title('Signal combiné avec bruit')
+    plt.legend()
+
+    # Démodulation pour chaque utilisateur
+    plt.subplot(2, 1, 2)
+    plt.plot(demodulated_user1, label='Démodulation Utilisateur 1')
+    plt.plot(demodulated_user2, label='Démodulation Utilisateur 2')
+    plt.title('Démodulation des signaux')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+    # Affichage des résultats de la démodulation
+    print("Données démodulées utilisateur 1:", demodulated_user1)
+    print("Données démodulées utilisateur 2:", demodulated_user2)
+
+if __name__ == "__main__":
+    main()
